@@ -76,12 +76,21 @@ playwright/
 │   └── api/
 │       └── api.spec.ts                 # HTTP-level tests (14 tests)
 │
+├── .claude/                            # AI agent configurations
+│   ├── agents/                         # Custom Claude Code agents
+│   │   ├── playwright-test-planner.md
+│   │   ├── playwright-test-generator.md
+│   │   ├── playwright-test-generator-custom.md
+│   │   └── playwright-test-healer.md
+│   └── docs/                           # Reference docs for agents
+│
 ├── specs/                              # Test planning documents
 │   └── saucedemo.plan.md
 │
+├── .mcp.json                           # Playwright MCP server config
 ├── playwright.config.ts                # Multi-project config
-├── tsconfig.json
-└── package.json
+├── package.json
+└── .gitignore
 ```
 
 ---
@@ -307,6 +316,128 @@ npm run test:report
 # Built-in Playwright HTML report
 npx playwright show-report
 ```
+
+---
+
+## AI Agents (Claude Code + Playwright MCP)
+
+This project includes custom [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) agent configurations that integrate with the [Playwright MCP server](https://github.com/anthropics/playwright-test-mcp-server) for AI-assisted test planning, generation, and healing.
+
+### Prerequisites
+
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) installed
+- The `.mcp.json` file in the project root configures the Playwright MCP server automatically
+
+### Agent Overview
+
+```
+.claude/
+├── agents/
+│   ├── playwright-test-planner.md             # Creates test plans by exploring the app
+│   ├── playwright-test-generator.md           # Default Playwright test generator
+│   ├── playwright-test-generator-custom.md    # Custom generator (follows POM pattern)
+│   └── playwright-test-healer.md              # Debugs and fixes failing tests
+│
+├── docs/                                       # Reference docs agents read before generating
+│   ├── page-object-model-pattern.md
+│   ├── test-generation-patterns.md
+│   ├── CUSTOM_AGENTS_GUIDE.md
+│   └── MODERN_OPTIMIZATIONS.md
+│
+└── settings.json                               # Agent permissions
+```
+
+| Agent | Purpose | When to Use |
+|-------|---------|-------------|
+| `playwright-test-planner` | Explores the app in a real browser and creates a structured test plan | Starting from scratch, need to identify what to test |
+| `playwright-test-generator-custom` | Generates tests following POM pattern, fixtures, and constants | Have a plan, need tests that match this project's architecture |
+| `playwright-test-generator` | Default Playwright generator (one test per file, raw locators) | Quick prototyping without POM constraints |
+| `playwright-test-healer` | Runs failing tests, debugs them, and fixes the code | Tests broke after app changes |
+
+### Usage Examples
+
+#### 1. Plan tests for a new feature
+
+```bash
+claude "Use the playwright-test-planner agent to create a test plan for the checkout flow"
+```
+
+The planner will:
+- Open the app in a real browser
+- Navigate through the checkout flow
+- Identify all interactive elements and states
+- Save a structured test plan to `specs/`
+
+#### 2. Generate tests using the custom generator (POM-aware)
+
+```bash
+claude "Use the playwright-test-generator-custom agent to generate tests for cart management"
+```
+
+The custom generator will:
+- Read existing page objects (`pages/*.ts`) and fixtures (`fixtures/pages.ts`)
+- Read constants from `utils/constants.ts`
+- Generate tests that import from `fixtures/pages`, use page object methods (no raw locators), group related tests in one file, and use `beforeEach` for shared setup
+
+Example output:
+
+```typescript
+import { test } from '../../../fixtures/pages';
+import { PRODUCTS } from '../../../utils/constants';
+
+test.describe('Cart Management', () => {
+  test.beforeEach(async ({ inventoryPage }) => {
+    await inventoryPage.goto();
+  });
+
+  test('Add single item to cart', async ({ inventoryPage }) => {
+    await inventoryPage.addToCart(PRODUCTS.BACKPACK.name);
+    await inventoryPage.expectBadgeCount(1);
+  });
+
+  test('Remove item from cart', async ({ inventoryPage }) => {
+    await inventoryPage.addToCart(PRODUCTS.BACKPACK.name);
+    await inventoryPage.removeFromCart(PRODUCTS.BACKPACK.name);
+    await inventoryPage.expectBadgeNotVisible();
+  });
+});
+```
+
+#### 3. Heal failing tests
+
+```bash
+claude "Use the playwright-test-healer agent to fix failing tests"
+```
+
+The healer will:
+- Run all tests and identify failures
+- Debug each failing test with `test_debug`
+- Take browser snapshots to understand the current page state
+- Update selectors, assertions, or timing issues
+- Re-run until tests pass (or mark as `test.fixme()` if the app has a genuine bug)
+
+### Creating Your Own Custom Agent
+
+Create a new file in `.claude/agents/` with YAML frontmatter:
+
+```markdown
+---
+name: my-custom-agent
+description: 'What this agent does'
+tools: Glob, Grep, Read, LS, mcp__playwright-test__browser_click, mcp__playwright-test__browser_snapshot
+model: sonnet
+color: blue
+---
+
+Your agent instructions here...
+
+# Before generating, read existing patterns:
+1. Read('fixtures/pages.ts')
+2. Read('utils/constants.ts')
+3. Read('pages/LoginPage.ts')
+```
+
+See `.claude/docs/CUSTOM_AGENTS_GUIDE.md` for the full guide on agent configuration, documentation patterns, and validation rules.
 
 ---
 

@@ -5,5 +5,3 @@ allure-results/
 allure-report/
 .auth/
 .DS_Store
-.claude/
-.mcp.json
